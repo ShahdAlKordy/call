@@ -1,0 +1,2065 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FawrySim POS — Mobile Recharge Card Generator & Thermal Receipt System</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter for UI, JetBrains Mono / Courier Prime for Thermal Receipt -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+            thermal: ['"Courier Prime"', '"Courier New"', 'Courier', 'monospace']
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    /* ==========================================================================
+       CUSTOM STYLES & THERMAL RECEIPT SPECIFICATION (css/style.css equivalent)
+       ========================================================================== */
+    :root {
+      --vodafone: #e60000;
+      --orange: #ff7900;
+      --etisalat: #719e19;
+      --we: #5c2d91;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: #0b0f19;
+      color: #f1f5f9;
+      overflow-x: hidden;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+
+    /* Company Logo Proportions Guardrail */
+    .company-logo-img {
+      object-fit: contain !important;
+      object-position: center !important;
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+      display: block;
+    }
+
+    /* ==========================================================================
+       FAWRY-STYLE SMALL THERMAL RECEIPT DESIGN
+       ========================================================================== */
+    .thermal-receipt-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .thermal-receipt {
+      background-color: #ffffff !important;
+      color: #000000 !important;
+      font-family: 'Courier Prime', 'Courier New', Courier, monospace !important;
+      line-height: 1.25;
+      box-sizing: border-box;
+      position: relative;
+      box-shadow: 0 14px 30px -10px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08);
+      margin: 0 auto;
+      transition: width 0.2s ease, padding 0.2s ease;
+      user-select: text;
+    }
+
+    /* Paper size dimensions on screen (accurate physical ratio representation) */
+    .thermal-receipt.paper-58mm {
+      width: 230px; /* ~58mm scaled for crisp screen preview */
+      padding: 12px 10px;
+      font-size: 11px;
+    }
+
+    .thermal-receipt.paper-80mm {
+      width: 302px; /* ~80mm scaled for crisp screen preview */
+      padding: 14px 14px;
+      font-size: 12px;
+    }
+
+    /* Subtle serrated paper edge effect on screen only */
+    .thermal-receipt::before,
+    .thermal-receipt::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 5px;
+      background-size: 10px 10px;
+      pointer-events: none;
+    }
+    .thermal-receipt::before {
+      top: -5px;
+      background-image: linear-gradient(135deg, transparent 50%, #ffffff 50%),
+                        linear-gradient(225deg, transparent 50%, #ffffff 50%);
+    }
+    .thermal-receipt::after {
+      bottom: -5px;
+      background-image: linear-gradient(45deg, transparent 50%, #ffffff 50%),
+                        linear-gradient(315deg, transparent 50%, #ffffff 50%);
+    }
+
+    .receipt-divider-dashed {
+      border: 0;
+      border-top: 1px dashed #000000 !important;
+      margin: 6px 0;
+      width: 100%;
+    }
+
+    .receipt-divider-solid {
+      border: 0;
+      border-top: 1.5px solid #000000 !important;
+      margin: 6px 0;
+      width: 100%;
+    }
+
+    .receipt-divider-double {
+      border: 0;
+      border-top: 3px double #000000 !important;
+      margin: 6px 0;
+      width: 100%;
+    }
+
+    /* Logo container inside thermal receipt */
+    .receipt-logo-box {
+      width: 100%;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 4px 0;
+      background: #ffffff;
+    }
+    .thermal-receipt.paper-80mm .receipt-logo-box {
+      height: 52px;
+    }
+
+    .receipt-logo-box img {
+      max-height: 100%;
+      max-width: 85%;
+      width: auto;
+      height: auto;
+      object-fit: contain !important;
+      /* Slight contrast boost for thermal clarity while preserving logo legibility */
+      filter: contrast(1.08);
+    }
+
+    /* Side-by-side mini logo + code summary strip right below main logo */
+    .receipt-code-highlight {
+      border: 1.5px solid #000000;
+      padding: 6px 4px;
+      margin: 5px 0;
+      text-align: center;
+      background-color: #ffffff;
+    }
+
+    .receipt-pin-digits {
+      font-family: 'Courier Prime', 'Courier New', monospace;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      word-break: break-all;
+      color: #000000;
+    }
+    .thermal-receipt.paper-58mm .receipt-pin-digits {
+      font-size: 13px;
+    }
+    .thermal-receipt.paper-80mm .receipt-pin-digits {
+      font-size: 15.5px;
+    }
+
+    .receipt-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 4px;
+      margin: 2px 0;
+      color: #000000;
+    }
+
+    .receipt-row-label {
+      font-weight: 400;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .receipt-row-value {
+      font-weight: 700;
+      text-align: right;
+      word-break: break-all;
+    }
+
+    /* Screen-only vs Print-only visibility */
+    #print-mount {
+      display: none;
+    }
+
+    /* ==========================================================================
+       THERMAL PRINTER @MEDIA PRINT ENGINE (58mm & 80mm SUPPORT)
+       ========================================================================== */
+    @media print {
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      html, body {
+        background: #ffffff !important;
+        color: #000000 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+      }
+
+      /* Hide all dashboard, sidebar, modals, notifications, and controls */
+      #app-shell,
+      #toast-container,
+      #confirm-modal,
+      #receipt-modal,
+      #structure-modal,
+      .no-print {
+        display: none !important;
+      }
+
+      /* Show ONLY the dedicated print mount container */
+      #print-mount {
+        display: block !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+      }
+
+      #print-mount .thermal-receipt {
+        box-shadow: none !important;
+        margin: 0 !important;
+        border: none !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        page-break-after: always !important;
+        break-after: page !important;
+      }
+
+      #print-mount .thermal-receipt:last-child {
+        page-break-after: auto !important;
+        break-after: auto !important;
+      }
+
+      /* Remove decorative serrated edges on real thermal paper print */
+      #print-mount .thermal-receipt::before,
+      #print-mount .thermal-receipt::after {
+        display: none !important;
+      }
+
+      /* Exact physical millimeter dimensions for 58mm and 80mm thermal rolls */
+      #print-mount.print-size-58mm .thermal-receipt {
+        width: 58mm !important;
+        max-width: 58mm !important;
+        padding: 2mm 2.5mm !important;
+        font-size: 8.5pt !important;
+      }
+
+      #print-mount.print-size-58mm .receipt-pin-digits {
+        font-size: 10.5pt !important;
+      }
+
+      #print-mount.print-size-80mm .thermal-receipt {
+        width: 80mm !important;
+        max-width: 80mm !important;
+        padding: 3mm 4mm !important;
+        font-size: 9.5pt !important;
+      }
+
+      #print-mount.print-size-80mm .receipt-pin-digits {
+        font-size: 12.5pt !important;
+      }
+
+      #print-mount .receipt-logo-box img {
+        max-height: 13mm !important;
+        max-width: 85% !important;
+        width: auto !important;
+        height: auto !important;
+        object-fit: contain !important;
+      }
+    }
+  </style>
+  <!-- Dynamic @page rule injected by JS when user toggles 58mm / 80mm -->
+  <style id="dynamic-page-print-style">
+    @media print {
+      @page {
+        size: 58mm auto;
+        margin: 0mm;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100 selection:bg-amber-400 selection:text-slate-950">
+
+  <!-- ==========================================================================
+       DEDICATED THERMAL PRINT MOUNT (ONLY VISIBLE DURING PRINTING)
+       ========================================================================== -->
+  <div id="print-mount" class="print-size-58mm" aria-hidden="true"></div>
+
+  <!-- ==========================================================================
+       MAIN APPLICATION SHELL
+       ========================================================================== -->
+  <div id="app-shell" class="min-h-screen flex flex-col lg:flex-row">
+
+    <!-- SIDEBAR NAVIGATION -->
+    <aside class="w-full lg:w-72 bg-slate-900/95 border-b lg:border-b-0 lg:border-r border-slate-800/80 flex flex-col justify-between shrink-0 lg:sticky lg:top-0 lg:h-screen z-30">
+      <div>
+        <!-- Brand Header -->
+        <div class="p-5 border-b border-slate-800/80 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-yellow-600 flex items-center justify-center text-slate-950 font-black text-lg shadow-lg shadow-amber-500/20">
+              POS
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h1 class="font-bold text-base tracking-tight text-white">FawrySim POS</h1>
+                <span class="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded">DEMO</span>
+              </div>
+              <p class="text-xs text-slate-400">Thermal Recharge System</p>
+            </div>
+          </div>
+
+          <!-- Mobile Quick Print Batch Button -->
+          <button onclick="printCurrentBatch()" class="lg:hidden px-3 py-1.5 rounded-lg bg-amber-400 text-slate-950 font-semibold text-xs flex items-center gap-1.5 shadow">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+            Print Batch
+          </button>
+        </div>
+
+        <!-- Navigation Links -->
+        <nav class="p-3 space-y-1.5" aria-label="Main Navigation">
+          <button onclick="scrollToSection('section-dashboard')" id="nav-dashboard" class="nav-btn w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium bg-amber-400/10 text-amber-300 border border-amber-400/20 transition">
+            <span class="flex items-center gap-3">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+              Dashboard & Companies
+            </span>
+            <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">4</span>
+          </button>
+
+          <button onclick="scrollToSection('section-generator')" id="nav-generator" class="nav-btn w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800/70 hover:text-white transition">
+            <span class="flex items-center gap-3">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+              Generator & Receipts
+            </span>
+            <span id="nav-batch-badge" class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">0</span>
+          </button>
+
+          <button onclick="scrollToSection('section-history')" id="nav-history" class="nav-btn w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800/70 hover:text-white transition">
+            <span class="flex items-center gap-3">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              Generated History
+            </span>
+            <span id="nav-history-badge" class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">0</span>
+          </button>
+
+          <button onclick="openStructureModal()" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800/70 hover:text-white transition">
+            <span class="flex items-center gap-3">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+              Project Folder & Specs
+            </span>
+            <span class="text-[10px] font-mono text-slate-400">INFO</span>
+          </button>
+        </nav>
+
+        <!-- Thermal Paper Roll Width Switcher in Sidebar -->
+        <div class="mx-3 mt-3 p-3.5 rounded-2xl bg-slate-950/90 border border-slate-800/90">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+              Thermal Roll Size
+            </span>
+            <span id="sidebar-paper-indicator" class="text-[11px] font-mono font-bold text-amber-400">58mm</span>
+          </div>
+          <div class="grid grid-cols-2 gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800">
+            <button type="button" onclick="setPaperSize('58mm')" id="btn-paper-58" class="py-1.5 px-2 rounded-lg text-xs font-bold transition bg-amber-400 text-slate-950 shadow">
+              58mm Roll
+            </button>
+            <button type="button" onclick="setPaperSize('80mm')" id="btn-paper-80" class="py-1.5 px-2 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white">
+              80mm Roll
+            </button>
+          </div>
+          <p class="mt-2 text-[11px] text-slate-400 leading-relaxed">
+            Adjusts live receipt dimensions and <code class="text-amber-300">@media print</code> paper width automatically.
+          </p>
+        </div>
+      </div>
+
+      <!-- Disclaimer Footer in Sidebar -->
+      <div class="p-4 m-3 rounded-2xl bg-amber-500/10 border border-amber-500/20">
+        <div class="flex items-start gap-2.5">
+          <svg class="w-4 h-4 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          <div class="text-[11px] text-amber-200/90 leading-relaxed">
+            <strong class="font-bold text-amber-300 block mb-0.5">SIMULATION NOTICE</strong>
+            All generated recharge pins are strictly random demo strings for POS & thermal printer testing only.
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT WORKSPACE -->
+    <main class="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 space-y-8 max-w-[1600px] mx-auto w-full">
+
+      <!-- TOP BAR & OVERVIEW KPI CARDS -->
+      <section id="section-dashboard" class="space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-5">
+          <div>
+            <div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs text-slate-300 mb-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              Egyptian Telecom POS Voucher & Thermal Receipt Simulator
+            </div>
+            <h2 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+              Mobile Recharge Card Generator
+            </h2>
+            <p class="text-sm text-slate-400 mt-1">
+              Select a telecom operator below to generate simulated test vouchers and print authentic 58mm/80mm Fawry-style thermal receipts.
+            </p>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2.5">
+            <button onclick="generateSampleSetAllCompanies()" class="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center gap-2 transition">
+              <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+              Demo All 4 Providers
+            </button>
+            <button onclick="printCurrentBatch()" class="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-amber-500/15 transition">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+              Print Current Batch (<span id="top-batch-count">0</span>)
+            </button>
+          </div>
+        </div>
+
+        <!-- 4 KPI Overview Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div class="p-4 rounded-2xl bg-slate-900/90 border border-slate-800/80 flex items-center justify-between">
+            <div>
+              <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Stored Codes</p>
+              <p id="kpi-total-codes" class="text-2xl font-extrabold font-mono text-white mt-1">0</p>
+              <p class="text-[11px] text-slate-400 mt-1">Unique simulated pins in LocalStorage</p>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-2xl bg-slate-900/90 border border-slate-800/80 flex items-center justify-between">
+            <div>
+              <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Simulated Value</p>
+              <p id="kpi-total-value" class="text-2xl font-extrabold font-mono text-emerald-400 mt-1">0 EGP</p>
+              <p class="text-[11px] text-slate-400 mt-1">Cumulative test recharge amount</p>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-2xl bg-slate-900/90 border border-slate-800/80 flex items-center justify-between">
+            <div>
+              <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Active Batch Receipts</p>
+              <p id="kpi-batch-count" class="text-2xl font-extrabold font-mono text-amber-400 mt-1">0</p>
+              <p class="text-[11px] text-slate-400 mt-1">Ready in thermal preview queue</p>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-2xl bg-slate-900/90 border border-slate-800/80 flex items-center justify-between">
+            <div>
+              <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Thermal Printer Mode</p>
+              <p id="kpi-paper-mode" class="text-2xl font-extrabold font-mono text-purple-400 mt-1">58mm</p>
+              <p class="text-[11px] text-slate-400 mt-1">Fawry POS Standard Roll</p>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- ======================================================================
+             COMPANY SELECTION CARDS (4 EGYPTIAN TELECOM PROVIDERS)
+             ====================================================================== -->
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <span class="w-2 h-5 rounded-full bg-amber-400"></span>
+              Select Telecom Provider
+            </h3>
+            <span class="text-xs text-slate-400">Click any card to select or click "Generate Recharge Code" for instant voucher creation</span>
+          </div>
+
+          <div id="company-cards-grid" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <!-- Populated dynamically via JS to ensure exact logo & fallback consistency -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================================================
+           GENERATOR SETTINGS + LIVE THERMAL RECEIPT PREVIEW SECTION
+           ======================================================================== -->
+      <section id="section-generator" class="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+
+        <!-- LEFT COLUMN: GENERATION SETTINGS PANEL (5 COLS) -->
+        <div class="xl:col-span-5 bg-slate-900/95 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-5 xl:sticky xl:top-6">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+            <div>
+              <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+                Generation Settings
+              </h3>
+              <p class="text-xs text-slate-400 mt-0.5">Configure batch size, provider, and recharge denomination</p>
+            </div>
+            <!-- Selected Provider Mini Logo Pill -->
+            <div id="settings-active-company-pill" class="px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-2">
+              Vodafone
+            </div>
+          </div>
+
+          <form id="generator-form" onsubmit="handleGenerateSubmit(event)" class="space-y-5" novalidate>
+            <!-- 1. Selected Company -->
+            <div>
+              <label for="select-company" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
+                1. Selected Telecom Company
+              </label>
+              <div class="relative">
+                <select id="select-company" onchange="selectCompany(this.value)" class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-amber-400 focus:ring-1 focus:ring-amber-400 text-sm text-white px-3.5 py-2.5 appearance-none font-medium">
+                  <option value="vodafone">Vodafone Egypt (vodafone.jpg)</option>
+                  <option value="orange">Orange Egypt (orange.jpg)</option>
+                  <option value="etisalat">Etisalat by e&amp; (etisalat.jpg)</option>
+                  <option value="we">WE Telecom Egypt (we.jpg)</option>
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Recharge Value (EGP) -->
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <label for="input-recharge-value" class="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                  2. Test Recharge Value (EGP)
+                </label>
+                <span class="text-[11px] font-mono text-amber-400" id="tax-preview-label">Est. Credit: 35.00 EGP</span>
+              </div>
+
+              <!-- Quick Denomination Chips -->
+              <div class="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-2.5">
+                <button type="button" onclick="setRechargeValue(10)" data-val="10" class="val-chip py-2 rounded-xl text-xs font-bold border border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500 transition">10</button>
+                <button type="button" onclick="setRechargeValue(20)" data-val="20" class="val-chip py-2 rounded-xl text-xs font-bold border border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500 transition">20</button>
+                <button type="button" onclick="setRechargeValue(30)" data-val="30" class="val-chip py-2 rounded-xl text-xs font-bold border border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500 transition">30</button>
+                <button type="button" onclick="setRechargeValue(50)" data-val="50" class="val-chip py-2 rounded-xl text-xs font-bold border border-amber-400 bg-amber-400/15 text-amber-300 transition">50</button>
+                <button type="button" onclick="setRechargeValue(100)" data-val="100" class="val-chip py-2 rounded-xl text-xs font-bold border border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500 transition">100</button>
+                <button type="button" onclick="setRechargeValue(200)" data-val="200" class="val-chip py-2 rounded-xl text-xs font-bold border border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500 transition">200</button>
+              </div>
+
+              <div class="relative">
+                <input
+                  type="number"
+                  id="input-recharge-value"
+                  min="5"
+                  max="5000"
+                  step="1"
+                  value="50"
+                  oninput="updateTaxPreview()"
+                  class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-amber-400 focus:ring-1 focus:ring-amber-400 text-sm font-mono text-white pl-3.5 pr-14 py-2.5"
+                  placeholder="Enter value in EGP"
+                  required
+                />
+                <span class="absolute inset-y-0 right-0 flex items-center pr-3.5 text-xs font-bold text-slate-400 font-mono">
+                  EGP
+                </span>
+              </div>
+            </div>
+
+            <!-- 3. Number of Random Test Codes to Generate -->
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <label for="input-code-count" class="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                  3. Number of Test Codes (Batch Count)
+                </label>
+                <span class="text-[11px] text-slate-400">Max 50 per batch</span>
+              </div>
+
+              <div class="grid grid-cols-4 gap-2 mb-2.5">
+                <button type="button" onclick="setBatchCount(1)" data-cnt="1" class="cnt-chip py-1.5 rounded-lg text-xs font-bold border border-amber-400 bg-amber-400/15 text-amber-300 transition">1 Receipt</button>
+                <button type="button" onclick="setBatchCount(2)" data-cnt="2" class="cnt-chip py-1.5 rounded-lg text-xs font-bold border border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500 transition">2 Receipts</button>
+                <button type="button" onclick="setBatchCount(4)" data-cnt="4" class="cnt-chip py-1.5 rounded-lg text-xs font-bold border border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500 transition">4 Receipts</button>
+                <button type="button" onclick="setBatchCount(10)" data-cnt="10" class="cnt-chip py-1.5 rounded-lg text-xs font-bold border border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500 transition">10 Receipts</button>
+              </div>
+
+              <input
+                type="number"
+                id="input-code-count"
+                min="1"
+                max="50"
+                step="1"
+                value="1"
+                oninput="syncCountChips(this.value)"
+                class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-amber-400 focus:ring-1 focus:ring-amber-400 text-sm font-mono text-white px-3.5 py-2.5"
+                required
+              />
+            </div>
+
+            <!-- 4. Paper Width Selection in Form -->
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
+                4. Thermal Printer Paper Width
+              </label>
+              <div class="grid grid-cols-2 gap-2.5">
+                <button type="button" onclick="setPaperSize('58mm')" id="form-paper-58" class="p-2.5 rounded-xl border border-amber-400 bg-amber-400/10 text-left transition flex items-center justify-between">
+                  <div>
+                    <div class="text-xs font-bold text-white">58mm Thermal</div>
+                    <div class="text-[11px] text-slate-400">Standard Handheld POS</div>
+                  </div>
+                  <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                </button>
+
+                <button type="button" onclick="setPaperSize('80mm')" id="form-paper-80" class="p-2.5 rounded-xl border border-slate-800 bg-slate-950 text-left transition flex items-center justify-between">
+                  <div>
+                    <div class="text-xs font-bold text-slate-200">80mm Thermal</div>
+                    <div class="text-[11px] text-slate-400">Desktop Kiosk Printer</div>
+                  </div>
+                  <span class="w-2.5 h-2.5 rounded-full bg-slate-700"></span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Validation Error Message Box -->
+            <div id="form-error-box" class="hidden p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-xs text-rose-300 font-medium"></div>
+
+            <!-- Submit Button -->
+            <button
+              type="submit"
+              id="btn-generate-main"
+              class="w-full py-3.5 px-5 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-extrabold text-sm tracking-wide shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition transform active:scale-[0.99]"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+              Generate Simulated Recharge Receipts
+            </button>
+          </form>
+        </div>
+
+        <!-- RIGHT COLUMN: GENERATED CODES & LIVE THERMAL RECEIPTS PREVIEW (7 COLS) -->
+        <div class="xl:col-span-7 bg-slate-900/95 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-5">
+          <!-- Header & Batch Controls -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="text-lg font-bold text-white">Live Thermal Receipt Preview</h3>
+                <span id="preview-paper-badge" class="px-2 py-0.5 text-[11px] font-mono font-bold rounded bg-slate-800 text-amber-300 border border-slate-700">
+                  58mm Paper
+                </span>
+              </div>
+              <p class="text-xs text-slate-400 mt-0.5">
+                Each generated code produces a separate Fawry-style thermal receipt with its company logo and simulated PIN.
+              </p>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onclick="copyAllBatchCodes()"
+                id="btn-copy-batch"
+                class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition"
+              >
+                <svg class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                Copy Batch Codes
+              </button>
+
+              <button
+                type="button"
+                onclick="printCurrentBatch()"
+                id="btn-print-batch"
+                class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-500/20 transition"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                Print All Receipts
+              </button>
+            </div>
+          </div>
+
+          <!-- Quick Summary Strip of Current Batch Codes -->
+          <div id="batch-codes-summary-bar" class="p-3.5 rounded-xl bg-slate-950 border border-slate-800/90 flex flex-wrap items-center justify-between gap-2">
+            <span class="text-xs text-slate-400">Latest Generated Batch:</span>
+            <span id="batch-summary-text" class="text-xs font-mono text-amber-300 font-semibold">Ready</span>
+          </div>
+
+          <!-- Thermal Receipts Grid Container -->
+          <div id="receipts-preview-container" class="grid grid-cols-1 md:grid-cols-2 gap-6 py-4 px-2 place-items-center bg-slate-950/70 rounded-2xl border border-slate-800/80 min-h-[420px] max-h-[820px] overflow-y-auto">
+            <!-- Dynamically populated with authentic thermal receipts -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================================================
+           GENERATED CODES HISTORY MANAGEMENT SECTION
+           ======================================================================== -->
+      <section id="section-history" class="bg-slate-900/95 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-5">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+          <div>
+            <h3 class="text-lg font-bold text-white flex items-center gap-2">
+              <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+              Generated Codes History
+            </h3>
+            <p class="text-xs text-slate-400 mt-0.5">
+              Persistent local record of all generated test recharge codes. Search, filter by company or date, copy, or reprint any thermal receipt.
+            </p>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onclick="printFilteredHistory()"
+              class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition"
+            >
+              <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+              Print Filtered (<span id="filtered-count-label">0</span>)
+            </button>
+
+            <button
+              type="button"
+              onclick="promptClearHistory()"
+              id="btn-clear-history"
+              class="px-3.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold flex items-center gap-1.5 transition"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              Clear All History
+            </button>
+          </div>
+        </div>
+
+        <!-- Search & Filter Bar -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3">
+          <!-- Search by code or reference -->
+          <div class="lg:col-span-5 relative">
+            <input
+              type="text"
+              id="history-search"
+              oninput="renderHistoryTable()"
+              placeholder="Search by code, company name, or receipt ref..."
+              class="w-full rounded-xl bg-slate-950 border border-slate-800 focus:border-amber-400 focus:ring-1 focus:ring-amber-400 text-xs text-white pl-9 pr-3.5 py-2.5"
+            />
+            <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </div>
+
+          <!-- Filter by Company -->
+          <div class="lg:col-span-3">
+            <select
+              id="history-filter-company"
+              onchange="renderHistoryTable()"
+              class="w-full rounded-xl bg-slate-950 border border-slate-800 focus:border-amber-400 text-xs text-white px-3 py-2.5"
+            >
+              <option value="all">All Companies (4)</option>
+              <option value="vodafone">Vodafone</option>
+              <option value="orange">Orange</option>
+              <option value="etisalat">Etisalat</option>
+              <option value="we">WE</option>
+            </select>
+          </div>
+
+          <!-- Filter by Date -->
+          <div class="lg:col-span-3">
+            <input
+              type="date"
+              id="history-filter-date"
+              onchange="renderHistoryTable()"
+              class="w-full rounded-xl bg-slate-950 border border-slate-800 focus:border-amber-400 text-xs text-white px-3 py-2.5"
+            />
+          </div>
+
+          <!-- Reset Filters -->
+          <div class="lg:col-span-1">
+            <button
+              type="button"
+              onclick="resetHistoryFilters()"
+              title="Reset Filters"
+              class="w-full h-full py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center justify-center transition"
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- History Table -->
+        <div class="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="border-b border-slate-800 bg-slate-900/90 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                <th class="py-3.5 px-4">Company</th>
+                <th class="py-3.5 px-4">Recharge Value</th>
+                <th class="py-3.5 px-4">Generated Code (Simulated)</th>
+                <th class="py-3.5 px-4">Receipt Ref</th>
+                <th class="py-3.5 px-4">Date</th>
+                <th class="py-3.5 px-4">Time</th>
+                <th class="py-3.5 px-4 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody id="history-table-body" class="divide-y divide-slate-800/70 text-xs">
+              <!-- Populated dynamically via JS -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ==========================================================================
+       MODAL 1: SINGLE RECEIPT PREVIEW & PRINT INSPECTOR
+       ========================================================================== -->
+  <div id="receipt-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div>
+          <h4 class="text-sm font-bold text-white">Thermal Receipt Inspector</h4>
+          <p class="text-[11px] text-slate-400">Ready for 58mm / 80mm thermal printer</p>
+        </div>
+        <button onclick="closeReceiptModal()" class="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <div id="modal-receipt-mount" class="py-4 bg-slate-950 rounded-xl border border-slate-800 flex justify-center max-h-[65vh] overflow-y-auto"></div>
+
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button onclick="closeReceiptModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300">
+          Close
+        </button>
+        <button id="modal-print-btn" class="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold flex items-center gap-1.5">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+          Print Thermal Receipt
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       MODAL 2: CLEAR HISTORY CONFIRMATION MODAL (NO NATIVE CONFIRM)
+       ========================================================================== -->
+  <div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4">
+      <div class="flex items-start gap-3">
+        <div class="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        </div>
+        <div>
+          <h4 class="text-sm font-bold text-white">Clear All Generated History?</h4>
+          <p class="text-xs text-slate-400 mt-1 leading-relaxed">
+            This will permanently remove all stored test recharge codes from your browser's LocalStorage. This action cannot be undone.
+          </p>
+        </div>
+      </div>
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button onclick="closeConfirmModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300">
+          Cancel
+        </button>
+        <button onclick="confirmClearAllHistory()" class="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-400 text-white text-xs font-bold">
+          Yes, Clear History
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       MODAL 3: PROJECT FOLDER STRUCTURE & LOGO ASSET VERIFICATION
+       ========================================================================== -->
+  <div id="structure-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-5 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h4 class="text-sm font-bold text-white">Project Architecture & Local Logo Assets</h4>
+        <button onclick="closeStructureModal()" class="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="space-y-3 text-xs text-slate-300">
+        <p class="text-slate-400">
+          This single-file build consolidates the modular architecture below and automatically loads local logos (<code class="text-amber-300">images/*.jpg</code> or root <code class="text-amber-300">*.jpg</code>) with smart high-contrast vector fallbacks if local image files are absent:
+        </p>
+        <pre class="p-3.5 rounded-xl bg-slate-950 border border-slate-800 font-mono text-[11px] text-amber-300 overflow-x-auto">Mobile-Recharge-System/
+│
+├── index.html          (Consolidated Single-File Application)
+├── css/
+│   └── style.css       (Embedded Thermal & Print Styles)
+├── js/
+│   └── app.js          (Embedded Generator, Storage & Print Engine)
+└── images/
+    ├── vodafone.jpg
+    ├── orange.jpg
+    ├── etisalat.jpg
+    └── we.jpg</pre>
+      </div>
+      <div class="flex justify-end">
+        <button onclick="closeStructureModal()" class="px-4 py-2 rounded-xl bg-amber-400 text-slate-950 text-xs font-bold">
+          Got It
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- ==========================================================================
+       APPLICATION JAVASCRIPT (js/app.js equivalent)
+       ========================================================================== -->
+  <script>
+    /**
+     * ==========================================================================
+     * 1. TELECOM PROVIDERS CONFIGURATION & FALLBACK LOGOS
+     * ==========================================================================
+     * Supports local image files:
+     *   1) images/vodafone.jpg (and fallback vodafone.jpg)
+     *   2) images/orange.jpg   (and fallback orange.jpg)
+     *   3) images/etisalat.jpg (and fallback etisalat.jpg)
+     *   4) images/we.jpg       (and fallback we.jpg)
+     * Plus crisp SVG Data-URI fallbacks via handleLogoError() so the right company
+     * logo ALWAYS renders in proportional aspect ratio on screen and in print.
+     */
+    const COMPANIES = {
+      vodafone: {
+        id: 'vodafone',
+        name: 'Vodafone',
+        fullName: 'VODAFONE EGYPT',
+        primaryImage: 'images/vodafone.jpg',
+        secondaryImage: 'vodafone.jpg',
+        accent: '#e60000',
+        badgeBg: 'rgba(230, 0, 0, 0.14)',
+        badgeBorder: 'rgba(230, 0, 0, 0.4)',
+        ussdTemplate: '*858*{CODE}#',
+        prefixDigit: '8',
+        svgFallback: `data:image/svg+xml;utf8,` + encodeURIComponent(`
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 80">
+            <rect width="260" height="80" rx="10" fill="#ffffff"/>
+            <circle cx="46" cy="40" r="26" fill="#e60000"/>
+            <path d="M48 21 C36 23 30 33 32 45 C34 54 41 59 49 58 C57 57 62 50 61 42 C60 35 54 31 47 32 C44 32 41 34 40 36 C41 28 47 23 54 22 Z" fill="#ffffff"/>
+            <text x="84" y="49" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="30" fill="#e60000" letter-spacing="-0.5">vodafone</text>
+          </svg>
+        `)
+      },
+      orange: {
+        id: 'orange',
+        name: 'Orange',
+        fullName: 'ORANGE EGYPT',
+        primaryImage: 'images/orange.jpg',
+        secondaryImage: 'orange.jpg',
+        accent: '#ff7900',
+        badgeBg: 'rgba(255, 121, 0, 0.14)',
+        badgeBorder: 'rgba(255, 121, 0, 0.4)',
+        ussdTemplate: '#102*{CODE}#',
+        prefixDigit: '5',
+        svgFallback: `data:image/svg+xml;utf8,` + encodeURIComponent(`
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 80">
+            <rect width="260" height="80" rx="10" fill="#ffffff"/>
+            <rect x="20" y="14" width="52" height="52" fill="#ff7900"/>
+            <text x="27" y="57" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="13" fill="#ffffff">orange</text>
+            <text x="86" y="50" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="34" fill="#111111" letter-spacing="-0.5">orange</text>
+            <circle cx="208" cy="28" r="4" fill="#ff7900"/>
+          </svg>
+        `)
+      },
+      etisalat: {
+        id: 'etisalat',
+        name: 'Etisalat',
+        fullName: 'ETISALAT MISR',
+        primaryImage: 'images/etisalat.jpg',
+        secondaryImage: 'etisalat.jpg',
+        accent: '#719e19',
+        badgeBg: 'rgba(113, 158, 25, 0.15)',
+        badgeBorder: 'rgba(113, 158, 25, 0.45)',
+        ussdTemplate: '*556*{CODE}#',
+        prefixDigit: '6',
+        svgFallback: `data:image/svg+xml;utf8,` + encodeURIComponent(`
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 80">
+            <rect width="260" height="80" rx="10" fill="#ffffff"/>
+            <circle cx="46" cy="40" r="25" fill="#719e19"/>
+            <text x="31" y="49" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="25" fill="#ffffff">e&amp;</text>
+            <text x="84" y="49" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="31" fill="#3a5308" letter-spacing="-0.5">etisalat</text>
+          </svg>
+        `)
+      },
+      we: {
+        id: 'we',
+        name: 'WE',
+        fullName: 'WE TELECOM EGYPT',
+        primaryImage: 'images/we.jpg',
+        secondaryImage: 'we.jpg',
+        accent: '#5c2d91',
+        badgeBg: 'rgba(92, 45, 145, 0.18)',
+        badgeBorder: 'rgba(147, 51, 234, 0.45)',
+        ussdTemplate: '*555*{CODE}#',
+        prefixDigit: '7',
+        svgFallback: `data:image/svg+xml;utf8,` + encodeURIComponent(`
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 80">
+            <rect width="260" height="80" rx="10" fill="#ffffff"/>
+            <rect x="20" y="14" width="66" height="52" rx="12" fill="#5c2d91"/>
+            <text x="30" y="49" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="28" fill="#ffffff">WE</text>
+            <text x="98" y="44" font-family="Arial, Helvetica, sans-serif" font-weight="800" font-size="20" fill="#5c2d91">Telecom Egypt</text>
+            <text x="98" y="61" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="11" fill="#444444">SIMULATED VOUCHER</text>
+          </svg>
+        `)
+      }
+    };
+
+    /**
+     * Progressive image fallback handler:
+     * 1st attempt: images/<company>.jpg
+     * 2nd attempt: <company>.jpg (root folder)
+     * 3rd attempt: Embedded high-contrast proportional SVG logo for that exact company
+     */
+    function handleLogoError(imgEl, companyKey) {
+      const comp = COMPANIES[companyKey];
+      if (!comp) return;
+      const stage = imgEl.getAttribute('data-fallback-stage') || '0';
+      if (stage === '0') {
+        imgEl.setAttribute('data-fallback-stage', '1');
+        imgEl.src = comp.secondaryImage;
+      } else if (stage === '1') {
+        imgEl.setAttribute('data-fallback-stage', '2');
+        imgEl.src = comp.svgFallback;
+      }
+    }
+
+    /**
+     * ==========================================================================
+     * 2. APPLICATION STATE & LOCALSTORAGE MANAGEMENT
+     * ==========================================================================
+     */
+    const STORAGE_KEY = 'fawrysim_recharge_history_v1';
+
+    let appState = {
+      selectedCompany: 'vodafone',
+      paperSize: '58mm', // '58mm' or '80mm'
+      currentBatch: [],  // Array of receipt objects currently displayed in live preview
+      history: []        // Array of all generated receipt objects saved in LocalStorage
+    };
+
+    function loadHistoryFromStorage() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            appState.history = parsed;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to read LocalStorage:', err);
+        appState.history = [];
+      }
+    }
+
+    function saveHistoryToStorage() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(appState.history));
+      } catch (err) {
+        console.error('Failed to save LocalStorage:', err);
+        showToast('Storage warning: Could not persist history to LocalStorage', 'error');
+      }
+    }
+
+    /**
+     * ==========================================================================
+     * 3. UNIQUE SIMULATED RECHARGE CODE GENERATOR
+     * ==========================================================================
+     * Generates a 16-digit simulated recharge code formatted as XXXX-XXXX-XXXX-XXXX.
+     * Ensures 100% uniqueness against all stored history records.
+     */
+    function generateUniqueSimulatedCode(companyKey) {
+      const comp = COMPANIES[companyKey] || COMPANIES.vodafone;
+      const existingCodes = new Set(appState.history.map(item => item.code));
+      let candidate = '';
+      let attempts = 0;
+
+      do {
+        // First digit uses company prefix digit, followed by 15 random digits
+        let rawDigits = comp.prefixDigit;
+        for (let i = 0; i < 15; i++) {
+          rawDigits += Math.floor(Math.random() * 10).toString();
+        }
+        // Format into 4 blocks of 4 digits: XXXX-XXXX-XXXX-XXXX
+        candidate = rawDigits.replace(/(\d{4})(?=\d)/g, '$1-');
+        attempts++;
+      } while (existingCodes.has(candidate) && attempts < 500);
+
+      return candidate;
+    }
+
+    /**
+     * Generates a unique Fawry-style receipt reference number
+     */
+    function generateReceiptRef() {
+      const existingRefs = new Set(appState.history.map(item => item.refNo));
+      let ref = '';
+      do {
+        const randomNum = Math.floor(10000000 + Math.random() * 90000000);
+        ref = `FWR-${randomNum}`;
+      } while (existingRefs.has(ref));
+      return ref;
+    }
+
+    /**
+     * Creates `count` recharge voucher records for `companyKey` with `value` EGP
+     */
+    function createRechargeBatch(companyKey, count, value) {
+      if (!COMPANIES[companyKey]) {
+        showToast('Invalid telecom company selected.', 'error');
+        return [];
+      }
+
+      const now = new Date();
+      const isoDate = now.getFullYear() + '-' +
+                      String(now.getMonth() + 1).padStart(2, '0') + '-' +
+                      String(now.getDate()).padStart(2, '0');
+      const timeStr = String(now.getHours()).padStart(2, '0') + ':' +
+                      String(now.getMinutes()).padStart(2, '0') + ':' +
+                      String(now.getSeconds()).padStart(2, '0');
+
+      const newRecords = [];
+
+      for (let i = 0; i < count; i++) {
+        const code = generateUniqueSimulatedCode(companyKey);
+        const refNo = generateReceiptRef();
+        const record = {
+          id: 'rcpt_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8) + '_' + i,
+          company: companyKey,
+          value: Number(value),
+          code: code,
+          refNo: refNo,
+          date: isoDate,
+          time: timeStr,
+          status: 'TEST / DEMO'
+        };
+        newRecords.push(record);
+        // Push immediately to history so subsequent codes in same batch also check uniqueness
+        appState.history.unshift(record);
+      }
+
+      saveHistoryToStorage();
+      appState.currentBatch = newRecords;
+
+      updateAllViews();
+      return newRecords;
+    }
+
+    /**
+     * ==========================================================================
+     * 4. THERMAL RECEIPT HTML BUILDER (AUTHENTIC FAWRY POS LAYOUT)
+     * ==========================================================================
+     * Ensures:
+     * 1. Correct company logo at the top (never stretched, never mismatched)
+     * 2. Company name
+     * 3. Recharge value
+     * 4. Simulated recharge code prominently displayed directly below & beside logo
+     * 5. Unique receipt reference number
+     * 6. Transaction date & time
+     * 7. Transaction status: TEST / DEMO
+     * 8. Clear notice that the generated code is simulated and cannot be used for actual recharge
+     */
+    function buildThermalReceiptMarkup(record, paperSizeClass) {
+      const comp = COMPANIES[record.company] || COMPANIES.vodafone;
+      const rawDigits = record.code.replace(/-/g, '');
+      const ussdDial = comp.ussdTemplate.replace('{CODE}', rawDigits);
+      const netCredit = (Number(record.value) * 0.7).toFixed(2);
+
+      return `
+        <article class="thermal-receipt ${paperSizeClass}" data-receipt-id="${record.id}" data-company="${comp.id}">
+          <!-- 1. Fawry POS Terminal Header -->
+          <div style="text-align:center; font-weight:700; font-size:11px; letter-spacing:0.5px;">
+            *** FAWRY POS TERMINAL ***
+          </div>
+          <div style="text-align:center; font-size:9.5px;">
+            TERM ID: POS-EG-88412 | MERCH: 40912
+          </div>
+
+          <hr class="receipt-divider-solid" />
+
+          <!-- 2. Company Logo at the Top (Proportional, Never Stretched) -->
+          <div class="receipt-logo-box">
+            <img
+              src="${comp.primaryImage}"
+              alt="${comp.name} Logo"
+              class="company-logo-img"
+              data-fallback-stage="0"
+              onerror="handleLogoError(this, '${comp.id}')"
+            />
+          </div>
+
+          <!-- 3. Company Name & Voucher Type -->
+          <div style="text-align:center; font-weight:700; font-size:13px; text-transform:uppercase; margin-top:2px;">
+            ${comp.fullName}
+          </div>
+          <div style="text-align:center; font-size:10px; font-weight:700;">
+            SIMULATED AIRTIME VOUCHER
+          </div>
+
+          <!-- 4. Recharge Value & Prominent Simulated Recharge Code Directly Below Logo -->
+          <div class="receipt-code-highlight">
+            <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px dashed #000; padding-bottom:3px; margin-bottom:4px;">
+              <img
+                src="${comp.primaryImage}"
+                alt="${comp.name}"
+                style="height:16px; width:auto; max-width:58px; object-fit:contain;"
+                data-fallback-stage="0"
+                onerror="handleLogoError(this, '${comp.id}')"
+              />
+              <span style="font-weight:700; font-size:12px;">VAL: ${Number(record.value).toFixed(2)} EGP</span>
+            </div>
+            <div style="font-size:9.5px; font-weight:700; text-transform:uppercase; margin-bottom:2px;">
+              SIMULATED RECHARGE PIN (TEST)
+            </div>
+            <div class="receipt-pin-digits">
+              ${record.code}
+            </div>
+          </div>
+
+          <!-- Recharge Value Breakdown -->
+          <div class="receipt-row">
+            <span class="receipt-row-label">RECHARGE VALUE:</span>
+            <span class="receipt-row-value">${Number(record.value).toFixed(2)} EGP</span>
+          </div>
+          <div class="receipt-row">
+            <span class="receipt-row-label">EST. NET CREDIT:</span>
+            <span class="receipt-row-value">${netCredit} EGP</span>
+          </div>
+          <div class="receipt-row">
+            <span class="receipt-row-label">DEMO DIAL FORMAT:</span>
+            <span class="receipt-row-value">${ussdDial}</span>
+          </div>
+
+          <hr class="receipt-divider-dashed" />
+
+          <!-- 5, 6, 7, 8. Reference Number, Date, Time, Status -->
+          <div class="receipt-row">
+            <span class="receipt-row-label">RECEIPT REF:</span>
+            <span class="receipt-row-value">${record.refNo}</span>
+          </div>
+          <div class="receipt-row">
+            <span class="receipt-row-label">DATE:</span>
+            <span class="receipt-row-value">${record.date}</span>
+          </div>
+          <div class="receipt-row">
+            <span class="receipt-row-label">TIME:</span>
+            <span class="receipt-row-value">${record.time}</span>
+          </div>
+          <div class="receipt-row">
+            <span class="receipt-row-label">STATUS:</span>
+            <span class="receipt-row-value">${record.status}</span>
+          </div>
+
+          <hr class="receipt-divider-double" />
+
+          <!-- 9. Explicit Simulation Notice -->
+          <div style="text-align:center; font-size:9.5px; font-weight:700; line-height:1.25; margin-top:4px;">
+            NOTICE: THIS CODE IS SIMULATED FOR TESTING &amp; DEMO PURPOSES ONLY. CANNOT BE USED FOR ACTUAL TELECOM RECHARGE.
+          </div>
+
+          <!-- Simulated Monochrome Barcode Graphic -->
+          <div style="margin-top:6px; text-align:center;">
+            <svg viewBox="0 0 200 26" style="width:88%; height:24px; margin:0 auto; display:block;" aria-hidden="true">
+              <rect x="2" y="0" width="3" height="26" fill="#000"/>
+              <rect x="8" y="0" width="1.5" height="26" fill="#000"/>
+              <rect x="13" y="0" width="4" height="26" fill="#000"/>
+              <rect x="20" y="0" width="2" height="26" fill="#000"/>
+              <rect x="25" y="0" width="1.5" height="26" fill="#000"/>
+              <rect x="30" y="0" width="5" height="26" fill="#000"/>
+              <rect x="38" y="0" width="2" height="26" fill="#000"/>
+              <rect x="44" y="0" width="3" height="26" fill="#000"/>
+              <rect x="50" y="0" width="1.5" height="26" fill="#000"/>
+              <rect x="55" y="0" width="4" height="26" fill="#000"/>
+              <rect x="63" y="0" width="2" height="26" fill="#000"/>
+              <rect x="68" y="0" width="4" height="26" fill="#000"/>
+              <rect x="75" y="0" width="1.5" height="26" fill="#000"/>
+              <rect x="80" y="0" width="3" height="26" fill="#000"/>
+              <rect x="87" y="0" width="5" height="26" fill="#000"/>
+              <rect x="95" y="0" width="2" height="26" fill="#000"/>
+              <rect x="100" y="0" width="1.5" height="26" fill="#000"/>
+              <rect x="105" y="0" width="4" height="26" fill="#000"/>
+              <rect x="113" y="0" width="2" height="26" fill="#000"/>
+              <rect x="118" y="0" width="3" height="26" fill="#000"/>
+              <rect x="125" y="0" width="5" height="26" fill="#000"/>
+              <rect x="133" y="0" width="1.5" height="26" fill="#000"/>
+              <rect x="138" y="0" width="4" height="26" fill="#000"/>
+              <rect x="145" y="0" width="2" height="26" fill="#000"/>
+              <rect x="150" y="0" width="3" height="26" fill="#000"/>
+              <rect x="157" y="0" width="1.5" height="26" fill="#000"/>
+              <rect x="162" y="0" width="5" height="26" fill="#000"/>
+              <rect x="170" y="0" width="2" height="26" fill="#000"/>
+              <rect x="175" y="0" width="4" height="26" fill="#000"/>
+              <rect x="183" y="0" width="1.5" height="26" fill="#000"/>
+              <rect x="188" y="0" width="3" height="26" fill="#000"/>
+              <rect x="194" y="0" width="4" height="26" fill="#000"/>
+            </svg>
+            <div style="font-size:8.5px; letter-spacing:1px; margin-top:2px;">${record.refNo}</div>
+          </div>
+        </article>
+      `;
+    }
+
+    /**
+     * ==========================================================================
+     * 5. DASHBOARD COMPANY CARDS & LIVE RECEIPTS RENDERING
+     * ==========================================================================
+     */
+    function renderCompanyCards() {
+      const grid = document.getElementById('company-cards-grid');
+      const paperClass = appState.paperSize === '80mm' ? 'paper-80mm' : 'paper-58mm';
+
+      const cardsHtml = Object.values(COMPANIES).map(comp => {
+        const isSelected = appState.selectedCompany === comp.id;
+        const companyHistoryCount = appState.history.filter(h => h.company === comp.id).length;
+
+        return `
+          <div
+            onclick="selectCompany('${comp.id}')"
+            style="border-color: ${isSelected ? comp.accent : 'rgba(30, 41, 59, 0.9)'}; box-shadow: ${isSelected ? `0 10px 30px -10px ${comp.accent}55` : 'none'};"
+            class="group cursor-pointer rounded-2xl bg-slate-900/95 border-2 p-4 transition-all duration-200 hover:-translate-y-0.5 flex flex-col justify-between"
+          >
+            <div>
+              <!-- Card Top Row: Status Pill & Generated Count -->
+              <div class="flex items-center justify-between gap-2 mb-3">
+                <span
+                  style="background:${comp.badgeBg}; border-color:${comp.badgeBorder}; color:#ffffff;"
+                  class="px-2.5 py-0.5 rounded-full text-[11px] font-bold border flex items-center gap-1.5"
+                >
+                  <span style="background:${comp.accent};" class="w-2 h-2 rounded-full"></span>
+                  ${comp.name}
+                </span>
+                <span class="text-[11px] font-mono text-slate-400">
+                  ${companyHistoryCount} generated
+                </span>
+              </div>
+
+              <!-- Company Logo Box (Preserves Proportions Without Stretching) -->
+              <div class="h-20 w-full rounded-xl bg-white p-2.5 flex items-center justify-center mb-3 shadow-inner border border-slate-200">
+                <img
+                  src="${comp.primaryImage}"
+                  alt="${comp.name} Logo"
+                  class="company-logo-img max-h-14"
+                  data-fallback-stage="0"
+                  onerror="handleLogoError(this, '${comp.id}')"
+                />
+              </div>
+
+              <!-- Company Name & Demo Info -->
+              <div class="flex items-baseline justify-between mb-3">
+                <div>
+                  <h4 class="text-base font-extrabold text-white">${comp.name} Egypt</h4>
+                  <p class="text-[11px] font-mono text-slate-400">${comp.ussdTemplate}</p>
+                </div>
+                ${isSelected ? `<span class="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30">Selected</span>` : ''}
+              </div>
+            </div>
+
+            <!-- Instant Generate Recharge Code Button -->
+            <button
+              type="button"
+              onclick="event.stopPropagation(); quickGenerateForCompany('${comp.id}')"
+              style="background-color: ${comp.accent};"
+              class="w-full py-2.5 px-3 rounded-xl text-white font-bold text-xs shadow-md hover:opacity-95 active:scale-[0.99] transition flex items-center justify-center gap-1.5"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 4v16m8-8H4"/></svg>
+              Generate Recharge Code
+            </button>
+          </div>
+        `;
+      }).join('');
+
+      grid.innerHTML = cardsHtml;
+
+      // Sync dropdown and active company pill in Settings panel
+      const selectEl = document.getElementById('select-company');
+      if (selectEl && selectEl.value !== appState.selectedCompany) {
+        selectEl.value = appState.selectedCompany;
+      }
+
+      const activeComp = COMPANIES[appState.selectedCompany];
+      const pill = document.getElementById('settings-active-company-pill');
+      if (pill && activeComp) {
+        pill.style.backgroundColor = activeComp.badgeBg;
+        pill.style.borderColor = activeComp.badgeBorder;
+        pill.style.color = '#ffffff';
+        pill.innerHTML = `
+          <span style="background:${activeComp.accent}" class="w-2 h-2 rounded-full"></span>
+          ${activeComp.name} Selected
+        `;
+      }
+    }
+
+    /**
+     * Renders the current batch of thermal receipts inside #receipts-preview-container
+     */
+    function renderCurrentBatchReceipts() {
+      const container = document.getElementById('receipts-preview-container');
+      const paperClass = appState.paperSize === '80mm' ? 'paper-80mm' : 'paper-58mm';
+      const summaryText = document.getElementById('batch-summary-text');
+
+      if (!appState.currentBatch || appState.currentBatch.length === 0) {
+        container.innerHTML = `
+          <div class="col-span-full flex flex-col items-center justify-center text-center p-8 text-slate-400">
+            <div class="w-14 h-14 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center mb-3 text-slate-500">
+              <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+            </div>
+            <p class="text-sm font-bold text-slate-300">No Active Receipts in Preview Queue</p>
+            <p class="text-xs text-slate-500 max-w-xs mt-1">
+              Click "Generate Recharge Code" on any company card or use the Generation Settings panel to create thermal receipts.
+            </p>
+          </div>
+        `;
+        summaryText.textContent = '0 receipts in queue';
+        return;
+      }
+
+      // Summary info
+      const totalBatchVal = appState.currentBatch.reduce((acc, r) => acc + Number(r.value), 0);
+      summaryText.textContent = `${appState.currentBatch.length} Receipt(s) • Total ${totalBatchVal} EGP • ${appState.paperSize} Roll`;
+
+      container.innerHTML = appState.currentBatch.map((record, idx) => {
+        const comp = COMPANIES[record.company] || COMPANIES.vodafone;
+        return `
+          <div class="thermal-receipt-wrapper w-full flex flex-col items-center space-y-2.5 p-3 rounded-2xl bg-slate-900/60 border border-slate-800/80">
+            <!-- Top Mini Toolbar Above Receipt -->
+            <div class="w-full flex items-center justify-between text-[11px] text-slate-400 px-1">
+              <span class="font-mono font-semibold text-slate-300">#${idx + 1} • ${comp.name} (${record.value} EGP)</span>
+              <span class="font-mono text-amber-400">${appState.paperSize}</span>
+            </div>
+
+            <!-- The Authentic Fawry Thermal Receipt -->
+            ${buildThermalReceiptMarkup(record, paperClass)}
+
+            <!-- Screen-Only Action Buttons Under Each Receipt -->
+            <div class="flex items-center gap-2 pt-1 w-full justify-center no-print">
+              <button
+                type="button"
+                onclick="copyCodeToClipboard('${record.code}')"
+                class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-semibold flex items-center gap-1 transition"
+              >
+                <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                Copy Code
+              </button>
+
+              <button
+                type="button"
+                onclick="printSingleReceiptById('${record.id}')"
+                class="px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-[11px] font-bold flex items-center gap-1 shadow transition"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                Print Receipt
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    /**
+     * ==========================================================================
+     * 6. GENERATED CODES HISTORY TABLE & FILTERING
+     * ==========================================================================
+     */
+    function getFilteredHistory() {
+      const searchVal = (document.getElementById('history-search')?.value || '').trim().toLowerCase();
+      const companyFilter = document.getElementById('history-filter-company')?.value || 'all';
+      const dateFilter = document.getElementById('history-filter-date')?.value || '';
+
+      return appState.history.filter(item => {
+        const comp = COMPANIES[item.company];
+        const matchesCompany = companyFilter === 'all' || item.company === companyFilter;
+        const matchesDate = !dateFilter || item.date === dateFilter;
+        const matchesSearch = !searchVal ||
+          item.code.toLowerCase().includes(searchVal) ||
+          item.refNo.toLowerCase().includes(searchVal) ||
+          (comp && comp.name.toLowerCase().includes(searchVal)) ||
+          String(item.value).includes(searchVal);
+
+        return matchesCompany && matchesDate && matchesSearch;
+      });
+    }
+
+    function renderHistoryTable() {
+      const tbody = document.getElementById('history-table-body');
+      const filtered = getFilteredHistory();
+      document.getElementById('filtered-count-label').textContent = filtered.length;
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="py-10 px-4 text-center text-slate-400">
+              No generated recharge records match your current filter criteria.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(record => {
+        const comp = COMPANIES[record.company] || COMPANIES.vodafone;
+        return `
+          <tr class="hover:bg-slate-900/80 transition">
+            <!-- Company Logo + Name -->
+            <td class="py-3 px-4 whitespace-nowrap">
+              <div class="flex items-center gap-2.5">
+                <div class="w-11 h-7 rounded bg-white p-1 flex items-center justify-center border border-slate-200 shrink-0">
+                  <img
+                    src="${comp.primaryImage}"
+                    alt="${comp.name}"
+                    class="company-logo-img max-h-5"
+                    data-fallback-stage="0"
+                    onerror="handleLogoError(this, '${comp.id}')"
+                  />
+                </div>
+                <div>
+                  <div class="font-bold text-white text-xs">${comp.name}</div>
+                  <div class="text-[10px] text-slate-400">TEST / DEMO</div>
+                </div>
+              </div>
+            </td>
+
+            <!-- Recharge Value -->
+            <td class="py-3 px-4 whitespace-nowrap">
+              <span class="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-mono font-bold text-xs">
+                ${record.value} EGP
+              </span>
+            </td>
+
+            <!-- Generated Code -->
+            <td class="py-3 px-4 whitespace-nowrap">
+              <div class="flex items-center gap-2">
+                <span class="font-mono font-bold text-amber-300 tracking-wider text-xs bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800">
+                  ${record.code}
+                </span>
+                <button
+                  type="button"
+                  onclick="copyCodeToClipboard('${record.code}')"
+                  title="Copy Code"
+                  class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                </button>
+              </div>
+            </td>
+
+            <!-- Receipt Ref -->
+            <td class="py-3 px-4 whitespace-nowrap font-mono text-slate-300">
+              ${record.refNo}
+            </td>
+
+            <!-- Date -->
+            <td class="py-3 px-4 whitespace-nowrap font-mono text-slate-300">
+              ${record.date}
+            </td>
+
+            <!-- Time -->
+            <td class="py-3 px-4 whitespace-nowrap font-mono text-slate-400">
+              ${record.time}
+            </td>
+
+            <!-- Actions: Inspect, Print, Copy, Delete -->
+            <td class="py-3 px-4 whitespace-nowrap text-right">
+              <div class="inline-flex items-center justify-end gap-1.5">
+                <button
+                  type="button"
+                  onclick="openReceiptModal('${record.id}')"
+                  class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold transition"
+                  title="Preview Thermal Receipt"
+                >
+                  View
+                </button>
+
+                <button
+                  type="button"
+                  onclick="printSingleReceiptById('${record.id}')"
+                  class="px-2.5 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-[11px] font-bold flex items-center gap-1 transition"
+                  title="Print Thermal Receipt"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                  Print
+                </button>
+
+                <button
+                  type="button"
+                  onclick="deleteHistoryRecord('${record.id}')"
+                  class="p-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 border border-rose-500/20 transition"
+                  title="Delete Record"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    /**
+     * ==========================================================================
+     * 7. PRINTING SYSTEM (58MM & 80MM THERMAL PRINTER ENGINE)
+     * ==========================================================================
+     */
+    function setPaperSize(size) {
+      if (size !== '58mm' && size !== '80mm') return;
+      appState.paperSize = size;
+
+      // Update dynamic @page CSS rule for accurate physical thermal printer roll width
+      const styleEl = document.getElementById('dynamic-page-print-style');
+      if (styleEl) {
+        styleEl.innerHTML = `
+          @media print {
+            @page {
+              size: ${size} auto;
+              margin: 0mm;
+            }
+          }
+        `;
+      }
+
+      // Update #print-mount class
+      const printMount = document.getElementById('print-mount');
+      printMount.classList.remove('print-size-58mm', 'print-size-80mm');
+      printMount.classList.add(size === '80mm' ? 'print-size-80mm' : 'print-size-58mm');
+
+      // Update UI buttons & badges
+      document.getElementById('sidebar-paper-indicator').textContent = size;
+      document.getElementById('kpi-paper-mode').textContent = size;
+      document.getElementById('preview-paper-badge').textContent = `${size} Paper`;
+
+      const btn58 = document.getElementById('btn-paper-58');
+      const btn80 = document.getElementById('btn-paper-80');
+      const form58 = document.getElementById('form-paper-58');
+      const form80 = document.getElementById('form-paper-80');
+
+      if (size === '58mm') {
+        btn58.className = 'py-1.5 px-2 rounded-lg text-xs font-bold transition bg-amber-400 text-slate-950 shadow';
+        btn80.className = 'py-1.5 px-2 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white';
+        form58.className = 'p-2.5 rounded-xl border border-amber-400 bg-amber-400/10 text-left transition flex items-center justify-between';
+        form80.className = 'p-2.5 rounded-xl border border-slate-800 bg-slate-950 text-left transition flex items-center justify-between';
+      } else {
+        btn80.className = 'py-1.5 px-2 rounded-lg text-xs font-bold transition bg-amber-400 text-slate-950 shadow';
+        btn58.className = 'py-1.5 px-2 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white';
+        form80.className = 'p-2.5 rounded-xl border border-amber-400 bg-amber-400/10 text-left transition flex items-center justify-between';
+        form58.className = 'p-2.5 rounded-xl border border-slate-800 bg-slate-950 text-left transition flex items-center justify-between';
+      }
+
+      renderCurrentBatchReceipts();
+      showToast(`Thermal printer paper size set to ${size}`);
+    }
+
+    /**
+     * Mounts an array of receipt records into #print-mount, ensures images are loaded, and triggers window.print()
+     */
+    function executeThermalPrint(recordsToPrint) {
+      if (!recordsToPrint || recordsToPrint.length === 0) {
+        showToast('No receipts available to print.', 'error');
+        return;
+      }
+
+      const printMount = document.getElementById('print-mount');
+      const paperClass = appState.paperSize === '80mm' ? 'paper-80mm' : 'paper-58mm';
+
+      printMount.classList.remove('print-size-58mm', 'print-size-80mm');
+      printMount.classList.add(appState.paperSize === '80mm' ? 'print-size-80mm' : 'print-size-58mm');
+
+      printMount.innerHTML = recordsToPrint
+        .map(rec => buildThermalReceiptMarkup(rec, paperClass))
+        .join('');
+
+      // Wait briefly so any fallback logo handlers settle before opening browser print dialog
+      const imgs = Array.from(printMount.querySelectorAll('img'));
+      let settled = 0;
+      const total = imgs.length;
+
+      let triggered = false;
+      const triggerPrintNow = () => {
+        if (triggered) return;
+        triggered = true;
+        window.print();
+      };
+
+      if (total === 0) {
+        triggerPrintNow();
+        return;
+      }
+
+      imgs.forEach(img => {
+        if (img.complete && img.naturalWidth > 0) {
+          settled++;
+          if (settled >= total) triggerPrintNow();
+        } else {
+          img.addEventListener('load', () => {
+            settled++;
+            if (settled >= total) triggerPrintNow();
+          });
+          img.addEventListener('error', () => {
+            settled++;
+            if (settled >= total) setTimeout(triggerPrintNow, 60);
+          });
+        }
+      });
+
+      // Failsafe timeout so print always fires promptly
+      setTimeout(triggerPrintNow, 350);
+    }
+
+    function printSingleReceiptById(recordId) {
+      const record = appState.history.find(r => r.id === recordId) ||
+                     appState.currentBatch.find(r => r.id === recordId);
+      if (!record) {
+        showToast('Receipt record not found.', 'error');
+        return;
+      }
+      executeThermalPrint([record]);
+    }
+
+    function printCurrentBatch() {
+      if (!appState.currentBatch || appState.currentBatch.length === 0) {
+        showToast('Please generate at least one receipt first.', 'error');
+        return;
+      }
+      executeThermalPrint(appState.currentBatch);
+    }
+
+    function printFilteredHistory() {
+      const filtered = getFilteredHistory();
+      if (filtered.length === 0) {
+        showToast('No filtered receipts to print.', 'error');
+        return;
+      }
+      executeThermalPrint(filtered);
+    }
+
+    /**
+     * ==========================================================================
+     * 8. USER INTERACTIONS, VALIDATION & UTILITIES
+     * ==========================================================================
+     */
+    function selectCompany(companyKey) {
+      if (!COMPANIES[companyKey]) return;
+      appState.selectedCompany = companyKey;
+      renderCompanyCards();
+    }
+
+    function quickGenerateForCompany(companyKey) {
+      selectCompany(companyKey);
+      const valInput = document.getElementById('input-recharge-value');
+      const value = Number(valInput?.value) || 50;
+      const validVal = value >= 5 && value <= 5000 ? value : 50;
+
+      const created = createRechargeBatch(companyKey, 1, validVal);
+      if (created.length > 0) {
+        showToast(`Generated ${COMPANIES[companyKey].name} ${validVal} EGP test receipt!`);
+        scrollToSection('section-generator');
+      }
+    }
+
+    function generateSampleSetAllCompanies() {
+      const val = Number(document.getElementById('input-recharge-value')?.value) || 50;
+      const now = new Date();
+      const isoDate = now.getFullYear() + '-' +
+                      String(now.getMonth() + 1).padStart(2, '0') + '-' +
+                      String(now.getDate()).padStart(2, '0');
+      const timeStr = String(now.getHours()).padStart(2, '0') + ':' +
+                      String(now.getMinutes()).padStart(2, '0') + ':' +
+                      String(now.getSeconds()).padStart(2, '0');
+
+      const demoBatch = [];
+      ['vodafone', 'orange', 'etisalat', 'we'].forEach((compKey, idx) => {
+        const record = {
+          id: 'rcpt_' + Date.now() + '_' + idx + '_' + Math.random().toString(36).substring(2, 6),
+          company: compKey,
+          value: val,
+          code: generateUniqueSimulatedCode(compKey),
+          refNo: generateReceiptRef(),
+          date: isoDate,
+          time: timeStr,
+          status: 'TEST / DEMO'
+        };
+        demoBatch.push(record);
+        appState.history.unshift(record);
+      });
+
+      saveHistoryToStorage();
+      appState.currentBatch = demoBatch;
+      updateAllViews();
+      showToast('Generated 4 receipts (Vodafone, Orange, Etisalat & WE)!');
+      scrollToSection('section-generator');
+    }
+
+    function setRechargeValue(amount) {
+      const input = document.getElementById('input-recharge-value');
+      input.value = amount;
+      updateTaxPreview();
+    }
+
+    function updateTaxPreview() {
+      const val = Number(document.getElementById('input-recharge-value').value) || 0;
+      const net = (val * 0.7).toFixed(2);
+      document.getElementById('tax-preview-label').textContent = `Est. Credit: ${net} EGP`;
+
+      document.querySelectorAll('.val-chip').forEach(btn => {
+        if (Number(btn.getAttribute('data-val')) === val) {
+          btn.className = 'val-chip py-2 rounded-xl text-xs font-bold border border-amber-400 bg-amber-400/15 text-amber-300 transition';
+        } else {
+          btn.className = 'val-chip py-2 rounded-xl text-xs font-bold border border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500 transition';
+        }
+      });
+    }
+
+    function setBatchCount(cnt) {
+      const input = document.getElementById('input-code-count');
+      input.value = cnt;
+      syncCountChips(cnt);
+    }
+
+    function syncCountChips(cnt) {
+      const num = Number(cnt);
+      document.querySelectorAll('.cnt-chip').forEach(btn => {
+        if (Number(btn.getAttribute('data-cnt')) === num) {
+          btn.className = 'cnt-chip py-1.5 rounded-lg text-xs font-bold border border-amber-400 bg-amber-400/15 text-amber-300 transition';
+        } else {
+          btn.className = 'cnt-chip py-1.5 rounded-lg text-xs font-bold border border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500 transition';
+        }
+      });
+    }
+
+    function handleGenerateSubmit(e) {
+      e.preventDefault();
+      const errBox = document.getElementById('form-error-box');
+      errBox.classList.add('hidden');
+
+      const companyKey = document.getElementById('select-company').value;
+      const value = Number(document.getElementById('input-recharge-value').value);
+      const count = Number(document.getElementById('input-code-count').value);
+
+      if (!COMPANIES[companyKey]) {
+        showFormError('Please select a valid telecom company.');
+        return;
+      }
+      if (!Number.isFinite(value) || value < 5 || value > 5000) {
+        showFormError('Please enter a valid test recharge value between 5 EGP and 5000 EGP.');
+        return;
+      }
+      if (!Number.isInteger(count) || count < 1 || count > 50) {
+        showFormError('Please enter a valid number of codes between 1 and 50.');
+        return;
+      }
+
+      appState.selectedCompany = companyKey;
+      createRechargeBatch(companyKey, count, value);
+      showToast(`Generated ${count} simulated ${COMPANIES[companyKey].name} receipt(s)!`);
+    }
+
+    function showFormError(msg) {
+      const errBox = document.getElementById('form-error-box');
+      errBox.textContent = msg;
+      errBox.classList.remove('hidden');
+    }
+
+    function copyCodeToClipboard(text) {
+      // Fallback-safe copy method for all browsers & iframes
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-9999px';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        showToast(`Copied code: ${text}`);
+      } catch (err) {
+        showToast('Failed to copy code', 'error');
+      }
+      document.body.removeChild(textArea);
+    }
+
+    function copyAllBatchCodes() {
+      if (!appState.currentBatch || appState.currentBatch.length === 0) {
+        showToast('No active batch codes to copy.', 'error');
+        return;
+      }
+      const lines = appState.currentBatch.map(r => {
+        const comp = COMPANIES[r.company]?.name || r.company;
+        return `${comp} (${r.value} EGP): ${r.code} [Ref: ${r.refNo} - SIMULATED TEST]`;
+      }).join('\n');
+      copyCodeToClipboard(lines);
+    }
+
+    function deleteHistoryRecord(recordId) {
+      appState.history = appState.history.filter(r => r.id !== recordId);
+      appState.currentBatch = appState.currentBatch.filter(r => r.id !== recordId);
+      saveHistoryToStorage();
+      updateAllViews();
+      showToast('Record deleted from history.');
+    }
+
+    function resetHistoryFilters() {
+      document.getElementById('history-search').value = '';
+      document.getElementById('history-filter-company').value = 'all';
+      document.getElementById('history-filter-date').value = '';
+      renderHistoryTable();
+    }
+
+    /**
+     * ==========================================================================
+     * 9. MODALS & NOTIFICATIONS (NO NATIVE ALERT / CONFIRM)
+     * ==========================================================================
+     */
+    function openReceiptModal(recordId) {
+      const record = appState.history.find(r => r.id === recordId);
+      if (!record) return;
+
+      const paperClass = appState.paperSize === '80mm' ? 'paper-80mm' : 'paper-58mm';
+      document.getElementById('modal-receipt-mount').innerHTML = buildThermalReceiptMarkup(record, paperClass);
+      const printBtn = document.getElementById('modal-print-btn');
+      printBtn.onclick = () => printSingleReceiptById(record.id);
+
+      const modal = document.getElementById('receipt-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeReceiptModal() {
+      const modal = document.getElementById('receipt-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function promptClearHistory() {
+      if (appState.history.length === 0) {
+        showToast('History is already empty.', 'error');
+        return;
+      }
+      const modal = document.getElementById('confirm-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeConfirmModal() {
+      const modal = document.getElementById('confirm-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function confirmClearAllHistory() {
+      appState.history = [];
+      appState.currentBatch = [];
+      saveHistoryToStorage();
+      updateAllViews();
+      closeConfirmModal();
+      showToast('All generated codes history cleared.');
+    }
+
+    function openStructureModal() {
+      const modal = document.getElementById('structure-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeStructureModal() {
+      const modal = document.getElementById('structure-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function scrollToSection(sectionId) {
+      const el = document.getElementById(sectionId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      const isError = type === 'error';
+
+      toast.className = `pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-2xl border text-xs font-semibold transition-all duration-300 ${
+        isError
+          ? 'bg-rose-950/95 border-rose-500/40 text-rose-200'
+          : 'bg-slate-900/95 border-amber-400/40 text-white'
+      }`;
+
+      toast.innerHTML = `
+        <span class="w-2 h-2 rounded-full ${isError ? 'bg-rose-400' : 'bg-amber-400'}"></span>
+        <span>${message}</span>
+      `;
+
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(8px)';
+        setTimeout(() => toast.remove(), 250);
+      }, 2800);
+    }
+
+    /**
+     * ==========================================================================
+     * 10. MASTER VIEW SYNCHRONIZATION & INITIALIZATION
+     * ==========================================================================
+     */
+    function updateAllViews() {
+      // Update KPI counters
+      const totalCodes = appState.history.length;
+      const totalValue = appState.history.reduce((sum, item) => sum + Number(item.value || 0), 0);
+      const batchCount = appState.currentBatch.length;
+
+      document.getElementById('kpi-total-codes').textContent = totalCodes.toLocaleString();
+      document.getElementById('kpi-total-value').textContent = `${totalValue.toLocaleString()} EGP`;
+      document.getElementById('kpi-batch-count').textContent = batchCount;
+      document.getElementById('top-batch-count').textContent = batchCount;
+      document.getElementById('nav-batch-badge').textContent = batchCount;
+      document.getElementById('nav-history-badge').textContent = totalCodes;
+
+      renderCompanyCards();
+      renderCurrentBatchReceipts();
+      renderHistoryTable();
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      loadHistoryFromStorage();
+
+      // If first visit and no history exists, seed 4 initial demo receipts (one for each Egyptian provider)
+      if (appState.history.length === 0) {
+        generateSampleSetAllCompanies();
+      } else {
+        // Show the most recent up to 4 receipts in the live preview area
+        appState.currentBatch = appState.history.slice(0, 4);
+        updateAllViews();
+      }
+
+      updateTaxPreview();
+    });
+  </script>
+</body>
+</html>
